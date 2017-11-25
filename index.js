@@ -58,23 +58,22 @@ function attrsInjector(attrs) {
         };
     };
 }
-function flattenAndFilterChildren(children) {
-    if (!Array.isArray(children)) {
-        return [];
+function getFirstDOMNodes(child) {
+    if (!child) {
+        return;
     }
-    return children.reduce(function (flatten, c) {
-        if (c.tag === "[") {
-            return flatten.concat(c.children);
-        }
-        else if (isValidVnodeDOM(c)) {
-            flatten.push(c);
-        }
-        return flatten;
-    }, []);
+    if (Array.isArray(child)) {
+        return child.reduce(function (total, c) { return total.concat(getFirstDOMNodes(c)); }, []).filter(function (n) { return n !== undefined; });
+    }
+    if (typeof child.tag === "string" && isValidVnodeDOM(child)) {
+        return [child];
+    }
+    if (child.children) {
+        return getFirstDOMNodes(child.children);
+    }
 }
 function inject(children, attrs) {
     if (Array.isArray(children)) {
-        children = flattenAndFilterChildren(children);
         children.forEach(attrsInjector(attrs));
     }
 }
@@ -92,11 +91,11 @@ function execAllOnbeforeremoveFns(children) {
 exports["default"] = function (v) {
     return {
         view: function (v) {
-            inject(v.children, v.attrs);
+            inject(getFirstDOMNodes(v.children), v.attrs);
             return v.children;
         },
         onbeforeremove: function (v) {
-            return execAllOnbeforeremoveFns(v.children);
+            return execAllOnbeforeremoveFns(getFirstDOMNodes(v.children));
         }
     };
 };

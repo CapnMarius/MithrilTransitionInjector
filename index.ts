@@ -76,23 +76,23 @@ function attrsInjector(attrs: IAttrs): (v: VnodeDOM) => void {
   };
 }
 
-function flattenAndFilterChildren(children: VnodeAny[]): VnodeAny[] {
-  if (!Array.isArray(children)) {
-    return [];
+function getFirstDOMNodes(child: VnodeAny | VnodeAny[]): VnodeAny[] {
+  if (!child) {
+    return;
   }
-  return children.reduce((flatten: VnodeAny[], c: VnodeDOM) => {
-    if (c.tag === "[") {
-      return flatten.concat(c.children as VnodeAny[]);
-    } else if (isValidVnodeDOM(c)) {
-      flatten.push(c);
-    }
-    return flatten;
-  }, []);
+  if (Array.isArray(child)) {
+    return child.reduce((total: VnodeAny[], c: VnodeAny) => total.concat(getFirstDOMNodes(c)), []).filter((n: VnodeAny) => n !== undefined);
+  }
+  if (typeof child.tag === "string" && isValidVnodeDOM(child as VnodeDOM)) {
+    return [child];
+  }
+  if (child.children) {
+    return getFirstDOMNodes(child.children as VnodeAny[]);
+  }
 }
 
 function inject(children: m.ChildArrayOrPrimitive, attrs: IAttrs): void {
   if (Array.isArray(children)) {
-    children = flattenAndFilterChildren(children as VnodeAny[]);
     children.forEach(attrsInjector(attrs));
   }
 }
@@ -117,11 +117,11 @@ export interface IAttrs {
 export default (v: m.Vnode<IAttrs>) => {
   return {
     view: (v: m.Vnode<IAttrs>) => {
-      inject(v.children, v.attrs);
+      inject(getFirstDOMNodes(v.children as VnodeAny[]), v.attrs);
       return v.children;
     },
     onbeforeremove: (v: m.VnodeDOM<IAttrs>) => {
-      return execAllOnbeforeremoveFns(v.children);
+      return execAllOnbeforeremoveFns(getFirstDOMNodes(v.children as VnodeAny[]));
     },
   };
 };
