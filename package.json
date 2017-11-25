@@ -1,19 +1,20 @@
 {
-  "name": "eventaggregator",
-  "version": "1.0.4",
-  "description": "EventAggregator pattern with very usefull features. Use it in NodeJS and the browser.",
+  "name": "mithril-transition-injector",
+  "version": "1.0.1",
+  "description": "The most easy way to add mount and unmount transitions to your components with CSS",
   "repository": {
     "type": "git",
-    "url": "https://github.com/CapnMarius/EventAggregator.git"
+    "url": "https://github.com/CapnMarius/MithrilTransitionInjector.git"
   },
   "main": "index.js",
   "scripts": {
     "build": "tsc ./index.ts --lib esnext,dom"
   },
   "keywords": [
-    "event",
-    "event-aggregator",
-    "eventListener"
+    "mithril",
+    "css",
+    "transition",
+    "animation"
   ],
   "author": "Marius Linders <marius.linders@hotmail.com>",
   "license": "ISC"
