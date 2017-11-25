@@ -65,7 +65,7 @@ function getFirstDOMNodes(child) {
     if (Array.isArray(child)) {
         return child.reduce(function (total, c) { return total.concat(getFirstDOMNodes(c)); }, []).filter(function (n) { return n !== undefined; });
     }
-    if (typeof child.tag === "string" && isValidVnodeDOM(child)) {
+    if (isValidVnodeDOM(child)) {
         return [child];
     }
     if (child.children) {
