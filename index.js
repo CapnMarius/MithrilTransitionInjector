@@ -27,15 +27,16 @@ function isValidVnodeDOM(v) {
     return v.tag !== "#" && v.tag !== "[" && v.tag !== "<";
 }
 exports.isValidVnodeDOM = isValidVnodeDOM;
-function attrsInjector(group, delay) {
+function attrsInjector(attrs) {
     return function (v) {
         if (typeof v.attrs !== "object" || v.attrs === null) {
             v.attrs = {};
         }
         var attachedOncreateFn = v.attrs.oncreate;
         v.attrs.oncreate = function () {
-            var iterateDelay = getIteratedDelay(group, delay);
-            setTimeout(function () { return v.dom.classList.add("oncreate"); }, iterateDelay || requestAnimationFrame);
+            var iterateDelay = getIteratedDelay(attrs.group, attrs.delay);
+            var oncreateDelay = attrs.oncreateDelay;
+            setTimeout(function () { return v.dom.classList.add("oncreate"); }, (iterateDelay + oncreateDelay) || requestAnimationFrame);
             if (typeof attachedOncreateFn === "function") {
                 attachedOncreateFn(v);
             }
@@ -43,13 +44,14 @@ function attrsInjector(group, delay) {
         var attachedOnbeforeremoveFn = v.attrs.onbeforeremove;
         v.attrs.onbeforeremove = function () {
             var promises = [];
-            var iterateDelay = getIteratedDelay(group, delay);
+            var iterateDelay = getIteratedDelay(attrs.group, attrs.delay);
+            var onbeforeremoveDelay = attrs.onbeforeremoveDelay;
             setTimeout(function () {
                 v.dom.classList.add("onbeforeremove");
                 v.dom.classList.remove("oncreate");
-            }, iterateDelay);
+            }, iterateDelay + onbeforeremoveDelay);
             var transitionDuration = getCSSTransitionDuration(v.dom);
-            promises.push(new Promise(function (resolve) { return setTimeout(resolve, transitionDuration + iterateDelay); }));
+            promises.push(new Promise(function (resolve) { return setTimeout(resolve, transitionDuration + iterateDelay + onbeforeremoveDelay); }));
             if (typeof attachedOnbeforeremoveFn === "function") {
                 promises.push(attachedOnbeforeremoveFn(v));
             }
@@ -71,13 +73,13 @@ function flattenAndFilterChildren(children) {
         return flatten;
     }, []);
 }
-function inject(children, group, delay) {
+function inject(children, attrs) {
     if (Array.isArray(children)) {
         children = flattenAndFilterChildren(children);
-        children.forEach(attrsInjector(group, delay));
+        children.forEach(attrsInjector(attrs));
     }
 }
-function execAllOnbeforeremoveFns(children, group, delay) {
+function execAllOnbeforeremoveFns(children) {
     var promises = [];
     if (Array.isArray(children)) {
         children.forEach(function (c) {
@@ -91,11 +93,11 @@ function execAllOnbeforeremoveFns(children, group, delay) {
 exports["default"] = function (v) {
     return {
         view: function (v) {
-            inject(v.children, v.attrs.group, v.attrs.delay);
+            inject(v.children, v.attrs);
             return v.children;
         },
         onbeforeremove: function (v) {
-            return execAllOnbeforeremoveFns(v.children, v.attrs.group, v.attrs.delay);
+            return execAllOnbeforeremoveFns(v.children);
         }
     };
 };
