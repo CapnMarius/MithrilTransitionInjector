@@ -49,9 +49,8 @@ function attrsInjector(attrs: IAttrs): (v: VnodeDOM) => void {
 
     const attachedOncreateFn = v.attrs.oncreate;
     v.attrs.oncreate = (): void => {
-      const iterateDelay: number = getIteratedDelay(attrs.group, attrs.delay);
-      const oncreateDelay: number = attrs.oncreateDelay;
-      setTimeout(() => v.dom.classList.add("oncreate"), (iterateDelay + oncreateDelay) || requestAnimationFrame);
+      const delay: number = getIteratedDelay(attrs.group, attrs.delay) + attrs.oncreateDelay;
+      setTimeout(() => v.dom.classList.add("oncreate"), delay || requestAnimationFrame);
       if (typeof attachedOncreateFn === "function") {
         attachedOncreateFn(v);
       }
@@ -60,14 +59,13 @@ function attrsInjector(attrs: IAttrs): (v: VnodeDOM) => void {
     const attachedOnbeforeremoveFn = v.attrs.onbeforeremove;
     v.attrs.onbeforeremove = (): Promise<any> => {
       const promises: Array<Promise<any>> = [];
-      const iterateDelay: number = getIteratedDelay(attrs.group, attrs.delay);
-      const onbeforeremoveDelay: number = attrs.onbeforeremoveDelay;
+      const delay: number = getIteratedDelay(attrs.group, attrs.delay) + attrs.onbeforeremoveDelay;
       setTimeout(() => {
         v.dom.classList.add("onbeforeremove");
         v.dom.classList.remove("oncreate");
-      }, iterateDelay + onbeforeremoveDelay);
+      }, delay);
       const transitionDuration: number = getCSSTransitionDuration(v.dom);
-      promises.push(new Promise((resolve) => setTimeout(resolve, transitionDuration + iterateDelay + onbeforeremoveDelay)));
+      promises.push(new Promise((resolve) => setTimeout(resolve, transitionDuration + delay)));
       if (typeof attachedOnbeforeremoveFn === "function") {
         promises.push(attachedOnbeforeremoveFn(v));
       }
