@@ -34,9 +34,8 @@ function attrsInjector(attrs) {
         }
         var attachedOncreateFn = v.attrs.oncreate;
         v.attrs.oncreate = function () {
-            var iterateDelay = getIteratedDelay(attrs.group, attrs.delay);
-            var oncreateDelay = attrs.oncreateDelay;
-            setTimeout(function () { return v.dom.classList.add("oncreate"); }, (iterateDelay + oncreateDelay) || requestAnimationFrame);
+            var delay = getIteratedDelay(attrs.group, attrs.delay) + attrs.oncreateDelay;
+            setTimeout(function () { return v.dom.classList.add("oncreate"); }, delay || requestAnimationFrame);
             if (typeof attachedOncreateFn === "function") {
                 attachedOncreateFn(v);
             }
@@ -44,14 +43,13 @@ function attrsInjector(attrs) {
         var attachedOnbeforeremoveFn = v.attrs.onbeforeremove;
         v.attrs.onbeforeremove = function () {
             var promises = [];
-            var iterateDelay = getIteratedDelay(attrs.group, attrs.delay);
-            var onbeforeremoveDelay = attrs.onbeforeremoveDelay;
+            var delay = getIteratedDelay(attrs.group, attrs.delay) + attrs.onbeforeremoveDelay;
             setTimeout(function () {
                 v.dom.classList.add("onbeforeremove");
                 v.dom.classList.remove("oncreate");
-            }, iterateDelay + onbeforeremoveDelay);
+            }, delay);
             var transitionDuration = getCSSTransitionDuration(v.dom);
-            promises.push(new Promise(function (resolve) { return setTimeout(resolve, transitionDuration + iterateDelay + onbeforeremoveDelay); }));
+            promises.push(new Promise(function (resolve) { return setTimeout(resolve, transitionDuration + delay); }));
             if (typeof attachedOnbeforeremoveFn === "function") {
                 promises.push(attachedOnbeforeremoveFn(v));
             }
