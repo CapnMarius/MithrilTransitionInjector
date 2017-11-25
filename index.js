@@ -28,14 +28,15 @@ function isValidVnodeDOM(v) {
 }
 exports.isValidVnodeDOM = isValidVnodeDOM;
 function attrsInjector(attrs) {
+    var parentAttrs = attrs;
     return function (v) {
         if (typeof v.attrs !== "object" || v.attrs === null) {
             v.attrs = {};
         }
         var attachedOncreateFn = v.attrs.oncreate;
         v.attrs.oncreate = function () {
-            var delay = getIteratedDelay(attrs.group, attrs.delay) + attrs.oncreateDelay;
-            setTimeout(function () { return v.dom.classList.add("oncreate"); }, delay || requestAnimationFrame);
+            var delay = getIteratedDelay(parentAttrs.group, parentAttrs.delay);
+            setTimeout(function () { return v.dom.classList.add("oncreate"); }, delay);
             if (typeof attachedOncreateFn === "function") {
                 attachedOncreateFn(v);
             }
@@ -43,7 +44,7 @@ function attrsInjector(attrs) {
         var attachedOnbeforeremoveFn = v.attrs.onbeforeremove;
         v.attrs.onbeforeremove = function () {
             var promises = [];
-            var delay = getIteratedDelay(attrs.group, attrs.delay) + attrs.onbeforeremoveDelay;
+            var delay = getIteratedDelay(parentAttrs.group, attrs.delay);
             setTimeout(function () {
                 v.dom.classList.add("onbeforeremove");
                 v.dom.classList.remove("oncreate");

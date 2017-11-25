@@ -42,6 +42,8 @@ export function isValidVnodeDOM(v: VnodeDOM): boolean {
 }
 
 function attrsInjector(attrs: IAttrs): (v: VnodeDOM) => void {
+  const parentAttrs: IAttrs = attrs;
+
   return (v: VnodeDOM) => {
     if (typeof v.attrs !== "object" || v.attrs === null) {
       v.attrs = {};
@@ -49,8 +51,8 @@ function attrsInjector(attrs: IAttrs): (v: VnodeDOM) => void {
 
     const attachedOncreateFn = v.attrs.oncreate;
     v.attrs.oncreate = (): void => {
-      const delay: number = getIteratedDelay(attrs.group, attrs.delay) + attrs.oncreateDelay;
-      setTimeout(() => v.dom.classList.add("oncreate"), delay || requestAnimationFrame);
+      const delay: number = getIteratedDelay(parentAttrs.group, parentAttrs.delay);
+      setTimeout(() => v.dom.classList.add("oncreate"), delay);
       if (typeof attachedOncreateFn === "function") {
         attachedOncreateFn(v);
       }
@@ -59,7 +61,7 @@ function attrsInjector(attrs: IAttrs): (v: VnodeDOM) => void {
     const attachedOnbeforeremoveFn = v.attrs.onbeforeremove;
     v.attrs.onbeforeremove = (): Promise<any> => {
       const promises: Array<Promise<any>> = [];
-      const delay: number = getIteratedDelay(attrs.group, attrs.delay) + attrs.onbeforeremoveDelay;
+      const delay: number = getIteratedDelay(parentAttrs.group, attrs.delay);
       setTimeout(() => {
         v.dom.classList.add("onbeforeremove");
         v.dom.classList.remove("oncreate");
@@ -110,11 +112,9 @@ function execAllOnbeforeremoveFns(children: m.ChildArrayOrPrimitive): Promise<an
 export interface IAttrs {
   group?: string;
   delay?: number;
-  oncreateDelay?: number;
-  onbeforeremoveDelay?: number;
 }
 
-export default (v: Vnode) => {
+export default (v: m.Vnode<IAttrs>) => {
   return {
     view: (v: m.Vnode<IAttrs>) => {
       inject(v.children, v.attrs);
