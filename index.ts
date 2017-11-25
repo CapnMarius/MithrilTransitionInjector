@@ -83,7 +83,7 @@ function getFirstDOMNodes(child: VnodeAny | VnodeAny[]): VnodeAny[] {
   if (Array.isArray(child)) {
     return child.reduce((total: VnodeAny[], c: VnodeAny) => total.concat(getFirstDOMNodes(c)), []).filter((n: VnodeAny) => n !== undefined);
   }
-  if (typeof child.tag === "string" && isValidVnodeDOM(child as VnodeDOM)) {
+  if (/*typeof child.tag === "string" && */isValidVnodeDOM(child as VnodeDOM)) {
     return [child];
   }
   if (child.children) {
