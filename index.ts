@@ -52,7 +52,7 @@ function attrsInjector(attrs: IAttrs): (v: VnodeDOM) => void {
     const attachedOncreateFn = v.attrs.oncreate;
     v.attrs.oncreate = (): void => {
       const delay: number = getIteratedDelay(parentAttrs.group, parentAttrs.delay);
-      setTimeout(() => v.dom.classList.add("oncreate"), delay);
+      setTimeout(() => v.dom.classList.add("oncreate"), delay || requestAnimationFrame);
       if (typeof attachedOncreateFn === "function") {
         attachedOncreateFn(v);
       }

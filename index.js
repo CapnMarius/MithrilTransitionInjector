@@ -36,7 +36,7 @@ function attrsInjector(attrs) {
         var attachedOncreateFn = v.attrs.oncreate;
         v.attrs.oncreate = function () {
             var delay = getIteratedDelay(parentAttrs.group, parentAttrs.delay);
-            setTimeout(function () { return v.dom.classList.add("oncreate"); }, delay);
+            setTimeout(function () { return v.dom.classList.add("oncreate"); }, delay || requestAnimationFrame);
             if (typeof attachedOncreateFn === "function") {
                 attachedOncreateFn(v);
             }
