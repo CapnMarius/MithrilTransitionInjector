@@ -8,43 +8,31 @@ import T from "mithril-transition-injector";
 ```
 ### import in JavaScript
 ```javascript
-const T = require("mithril-transition-injector");
+const T = require("mithril-transition-injector").default;
 ```
 ### example 
 ```typescript
-import * as m from "mithril";
-import { ITodo, ITodos } from "../../types/todos";
-import Todo from "../Todo/index";
-import Controller from "./controller";
-import Input from "../Input";
+import * as m from "mithril"; 
 import T from "mithril-transition-injector";
 import "./style.scss";
 
-export default class Todos implements m.ClassComponent<any> {
-  private controller: Controller = new Controller();
-
-  public view(v: m.CVnode<any>) {
+export default class App implements m.ClassComponent<any> {
+  public view(v: m.CVnode<any>) {
     return <T delay={250} group="t" deep={3}>
-      <div className="component--Todos t t-down">
+      <div className="app t t-down">
         <div className="title t t-down">My Todo's</div>
-        <button className="clear t t-down" onclick={() => this.controller.deleteAll()}>X</button>
-
-        <div className="todos">
+        <button className="clear t t-down">X</button>
+        
+        <div className="todos">
           {this.controller.todos.map((todo: ITodo, index: number) =>
-            <Todo className="t t-right" key={todo.id} done={todo.done}
-              ondonechange={(event, done: boolean): void => this.controller.update(index, { done })}
-              ondelete={(event): void => this.controller.delete(index)}
-            >{todo.title}</Todo>,
+            <Todo className="t t-right" key={todo.id} done={todo.done}>
+              {todo.title}
+            </Todo>,
           )}
         </div>
 
-        <Input className="t t-down"
-          onenter={(event, value: string): string => {
-            this.controller.create(value);
-            return "";
-          }}
-        />
-      </div>
+        <input className="create t t-down" />
+      </div>
     </T>;
   }
 }
