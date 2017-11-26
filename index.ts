@@ -6,9 +6,11 @@ interface IGroup {
 }
 
 export interface IAttrs {
-  group: string;
+  transitionprefix: string;
+  group?: string;
   delay?: number;
-  deep?: boolean | number;
+  pause?: number;
+  deep?: number;
 }
 
 type Vnode = m.Vnode<any, any>;
@@ -17,9 +19,9 @@ type Key = string | number;
 
 const groups: { [key: string]: IGroup } = {};
 
-function getIteratedDelay(group: string = "main", delay: number = 0): number {
+function getIteratedDelay(group: string = "main", delay: number = 0, pause: number = 0): number {
   if (delay === 0) {
-    return 0;
+    return delay + pause;
   }
 
   if (groups[group] === undefined) {
@@ -29,11 +31,14 @@ function getIteratedDelay(group: string = "main", delay: number = 0): number {
   const g: IGroup = groups[group];
 
   g.iteration++;
+  let first: boolean = g.lastStamp === 0;
   if (g.lastStamp + 100 < Date.now()) {
     g.iteration = 0;
+  } else {
+    first = true;
   }
   g.lastStamp = Date.now();
-  return g.iteration * delay;
+  return (g.iteration * delay) + (first ? pause : 0);
 }
 
 function getCSSTransitionDuration(dom: Element): number {
@@ -54,40 +59,40 @@ function getClassName(list: DOMTokenList, prefix: string): string {
 }
 
 function onCreateFn(dom: Element, attrs: IAttrs): void {
-  const className: string = getClassName(dom.classList, attrs.group + "-");
-  dom.setAttribute(`data-${attrs.group}`, className);
-  const delay: number = getIteratedDelay(attrs.group, attrs.delay);
+  const className: string = getClassName(dom.classList, attrs.transitionprefix + "-");
+  dom.setAttribute(`data-${attrs.transitionprefix}`, className);
+  const delay: number = getIteratedDelay(attrs.group, attrs.delay, attrs.pause);
   setTimeout(() => dom.classList.remove(className), delay || requestAnimationFrame);
 }
 
 function onBeforeRemoveFn(dom: Element, attrs: IAttrs): Promise<any> {
-  const className: string = dom.getAttribute(`data-${attrs.group}`);
-  const delay: number = getIteratedDelay(attrs.group, attrs.delay);
+  const className: string = dom.getAttribute(`data-${attrs.transitionprefix}`);
+  const delay: number = getIteratedDelay(attrs.group, attrs.delay, attrs.pause);
   setTimeout(() => dom.classList.add(`${className}-after`), delay);
   const duration: number = getCSSTransitionDuration(dom);
   return new Promise((resolve) => setTimeout(resolve, duration + delay));
 }
 
-function getGroupDOMNodes(child: Vnode | Vnode[], group: string, deep: boolean | number = false, depth: number = 0): Vnode[] {
+function getGroupDOMNodes(child: Vnode | Vnode[], transitionprefix: string, deep: number = 1, depth: number = 0): Vnode[] {
   let nodes = [];
+
+  if (depth >= deep) {
+    return nodes;
+  }
 
   if (Array.isArray(child)) {
     child.forEach((c: Vnode | Vnode[]) => {
-      nodes = nodes.concat(getGroupDOMNodes(c, group, deep, depth));
+      nodes = nodes.concat(getGroupDOMNodes(c, transitionprefix, deep, depth));
     });
   } else {
-    if (child && child.attrs && child.attrs.className && child.attrs.className.split(" ").indexOf(group) !== -1) {
+    depth ++;
+    if (child && child.attrs && child.attrs.className && child.attrs.className.split(" ").indexOf(transitionprefix) !== -1) {
       nodes.push(child);
-
-      depth ++;
-      if (deep === false || deep === depth) {
-        return nodes;
-      }
     }
 
     if (Array.isArray(child.children)) {
       child.children.forEach((c: Vnode | Vnode[]) => {
-        nodes = nodes.concat(getGroupDOMNodes(c, group, deep, depth));
+        nodes = nodes.concat(getGroupDOMNodes(c, transitionprefix, deep, depth));
       });
     }
   }
@@ -142,7 +147,7 @@ function onAllOnbeforeremoveFns(children: m.ChildArrayOrPrimitive): Promise<any>
 const TransitionInjector = (v: m.Vnode<IAttrs>) => {
   let children = [];
   const inject = (v: m.Vnode<IAttrs>) => {
-    children = getGroupDOMNodes(v.children as Vnode[], v.attrs.group, v.attrs.deep);
+    children = getGroupDOMNodes(v.children as Vnode[], v.attrs.transitionprefix, v.attrs.deep);
     childrenAttrsInjector(children, v.attrs);
   };
   return {
