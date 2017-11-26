@@ -17,7 +17,7 @@ import { ITodo, ITodos } from "../../types/todos";
 import Todo from "../Todo/index";
 import Controller from "./controller";
 import Input from "../Input";
-import T from "../T";
+import T from "mithril-transition-injector";
 import "./style.scss";
 
 export default class Todos implements m.ClassComponent<any> {
