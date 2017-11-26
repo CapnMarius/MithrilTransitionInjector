@@ -24,7 +24,7 @@ export default class App implements m.ClassComponent<any> {
         <button className="clear t t-down">X</button>
         
         <div className="todos">
-          {this.controller.todos.map((todo: ITodo, index: number) =>
+          {this.todos.map((todo: ITodo, index: number) =>
             <Todo className="t t-right" key={todo.id} done={todo.done}>
               {todo.title}
             </Todo>,
