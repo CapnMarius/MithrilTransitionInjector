@@ -5,12 +5,18 @@ interface IGroup {
   lastStamp: number;
 }
 
+export interface IAttrs {
+  group: string;
+  delay?: number;
+  deep?: boolean | number;
+}
+
 type Vnode = m.Vnode<any, any>;
 type VnodeDOM = m.VnodeDOM<any, any>;
-type VnodeAny = Vnode | VnodeDOM;
 type Key = string | number;
 
 const groups: { [key: string]: IGroup } = {};
+
 function getIteratedDelay(group: string = "main", delay: number = 0): number {
   if (delay === 0) {
     return 0;
@@ -30,20 +36,72 @@ function getIteratedDelay(group: string = "main", delay: number = 0): number {
   return g.iteration * delay;
 }
 
-export function getCSSTransitionDuration(dom: Element): number {
+function getCSSTransitionDuration(dom: Element): number {
   return (
     parseFloat(getComputedStyle(dom).transitionDelay) +
     parseFloat(getComputedStyle(dom).transitionDuration)
   ) * 1000;
 }
 
-export function isValidVnodeDOM(v: VnodeDOM): boolean {
+function isValidVnodeDOM(v: VnodeDOM): boolean {
   return v.tag !== "#" && v.tag !== "[" && v.tag !== "<";
 }
 
-function attrsInjector(attrs: IAttrs): (v: VnodeDOM) => void {
-  const parentAttrs: IAttrs = attrs;
+function getClassName(list: DOMTokenList, prefix: string): string {
+  const arrList: string[] = Array.from(list) || [];
+  const index: number = arrList.findIndex((x: string) => x.indexOf(prefix) === 0);
+  return arrList[index];
+}
 
+function onCreateFn(dom: Element, attrs: IAttrs): void {
+  const className: string = getClassName(dom.classList, attrs.group + "-");
+  dom.setAttribute(`data-${attrs.group}`, className);
+  const delay: number = getIteratedDelay(attrs.group, attrs.delay);
+  setTimeout(() => dom.classList.remove(className), delay || requestAnimationFrame);
+}
+
+function onBeforeRemoveFn(dom: Element, attrs: IAttrs): Promise<any> {
+  const className: string = dom.getAttribute(`data-${attrs.group}`);
+  const delay: number = getIteratedDelay(attrs.group, attrs.delay);
+  setTimeout(() => dom.classList.add(`${className}-after`), delay);
+  const duration: number = getCSSTransitionDuration(dom);
+  return new Promise((resolve) => setTimeout(resolve, duration + delay));
+}
+
+function getGroupDOMNodes(child: Vnode | Vnode[], group: string, deep: boolean | number = false, depth: number = 0): Vnode[] {
+  let nodes = [];
+
+  if (Array.isArray(child)) {
+    child.forEach((c: Vnode | Vnode[]) => {
+      nodes = nodes.concat(getGroupDOMNodes(c, group, deep, depth));
+    });
+  } else {
+    if (child && child.attrs && child.attrs.className && child.attrs.className.split(" ").indexOf(group) !== -1) {
+      nodes.push(child);
+
+      depth ++;
+      if (deep === false || deep === depth) {
+        return nodes;
+      }
+    }
+
+    if (Array.isArray(child.children)) {
+      child.children.forEach((c: Vnode | Vnode[]) => {
+        nodes = nodes.concat(getGroupDOMNodes(c, group, deep, depth));
+      });
+    }
+  }
+
+  return nodes;
+}
+
+function childrenAttrsInjector(children: m.ChildArrayOrPrimitive, attrs: IAttrs): void {
+  if (Array.isArray(children)) {
+    children.forEach(attrsInjector(attrs));
+  }
+}
+
+function attrsInjector(attrs: IAttrs): (v: VnodeDOM) => void {
   return (v: VnodeDOM) => {
     if (typeof v.attrs !== "object" || v.attrs === null) {
       v.attrs = {};
@@ -51,8 +109,7 @@ function attrsInjector(attrs: IAttrs): (v: VnodeDOM) => void {
 
     const attachedOncreateFn = v.attrs.oncreate;
     v.attrs.oncreate = (): void => {
-      const delay: number = getIteratedDelay(parentAttrs.group, parentAttrs.delay);
-      setTimeout(() => v.dom.classList.add("oncreate"), delay || requestAnimationFrame);
+      onCreateFn(v.dom, attrs);
       if (typeof attachedOncreateFn === "function") {
         attachedOncreateFn(v);
       }
@@ -61,13 +118,7 @@ function attrsInjector(attrs: IAttrs): (v: VnodeDOM) => void {
     const attachedOnbeforeremoveFn = v.attrs.onbeforeremove;
     v.attrs.onbeforeremove = (): Promise<any> => {
       const promises: Array<Promise<any>> = [];
-      const delay: number = getIteratedDelay(parentAttrs.group, attrs.delay);
-      setTimeout(() => {
-        v.dom.classList.add("onbeforeremove");
-        v.dom.classList.remove("oncreate");
-      }, delay);
-      const transitionDuration: number = getCSSTransitionDuration(v.dom);
-      promises.push(new Promise((resolve) => setTimeout(resolve, transitionDuration + delay)));
+      promises.push(onBeforeRemoveFn(v.dom, attrs));
       if (typeof attachedOnbeforeremoveFn === "function") {
         promises.push(attachedOnbeforeremoveFn(v));
       }
@@ -76,31 +127,10 @@ function attrsInjector(attrs: IAttrs): (v: VnodeDOM) => void {
   };
 }
 
-function getFirstDOMNodes(child: VnodeAny | VnodeAny[]): VnodeAny[] {
-  if (!child) {
-    return;
-  }
-  if (Array.isArray(child)) {
-    return child.reduce((total: VnodeAny[], c: VnodeAny) => total.concat(getFirstDOMNodes(c)), []).filter((n: VnodeAny) => n !== undefined);
-  }
-  if (/*typeof child.tag === "string" && */isValidVnodeDOM(child as VnodeDOM)) {
-    return [child];
-  }
-  if (child.children) {
-    return getFirstDOMNodes(child.children as VnodeAny[]);
-  }
-}
-
-function inject(children: m.ChildArrayOrPrimitive, attrs: IAttrs): void {
-  if (Array.isArray(children)) {
-    children.forEach(attrsInjector(attrs));
-  }
-}
-
-function execAllOnbeforeremoveFns(children: m.ChildArrayOrPrimitive): Promise<any> {
+function onAllOnbeforeremoveFns(children: m.ChildArrayOrPrimitive): Promise<any> {
   const promises: Array<Promise<any>> = [];
   if (Array.isArray(children)) {
-    children.forEach((c: VnodeAny) => {
+    children.forEach((c: Vnode) => {
       if (c !== undefined && typeof c.attrs === "object" && c.attrs !== null && typeof c.attrs.onbeforeremove === "function") {
         promises.push(c.attrs.onbeforeremove());
       }
@@ -109,19 +139,20 @@ function execAllOnbeforeremoveFns(children: m.ChildArrayOrPrimitive): Promise<an
   return Promise.all(promises);
 }
 
-export interface IAttrs {
-  group?: string;
-  delay?: number;
-}
-
 export default (v: m.Vnode<IAttrs>) => {
+  let children = [];
+  const inject = (v: m.Vnode<IAttrs>) => {
+    children = getGroupDOMNodes(v.children as Vnode[], v.attrs.group, v.attrs.deep);
+    childrenAttrsInjector(children, v.attrs);
+  };
   return {
+    oninit: inject,
+    onbeforeupdate: inject,
     view: (v: m.Vnode<IAttrs>) => {
-      inject(getFirstDOMNodes(v.children as VnodeAny[]), v.attrs);
       return v.children;
     },
     onbeforeremove: (v: m.VnodeDOM<IAttrs>) => {
-      return execAllOnbeforeremoveFns(getFirstDOMNodes(v.children as VnodeAny[]));
+      return onAllOnbeforeremoveFns(children);
     },
   };
 };

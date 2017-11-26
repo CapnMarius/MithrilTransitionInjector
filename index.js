@@ -22,21 +22,65 @@ function getCSSTransitionDuration(dom) {
     return (parseFloat(getComputedStyle(dom).transitionDelay) +
         parseFloat(getComputedStyle(dom).transitionDuration)) * 1000;
 }
-exports.getCSSTransitionDuration = getCSSTransitionDuration;
 function isValidVnodeDOM(v) {
     return v.tag !== "#" && v.tag !== "[" && v.tag !== "<";
 }
-exports.isValidVnodeDOM = isValidVnodeDOM;
+function getClassName(list, prefix) {
+    var arrList = Array.from(list) || [];
+    var index = arrList.findIndex(function (x) { return x.indexOf(prefix) === 0; });
+    return arrList[index];
+}
+function onCreateFn(dom, attrs) {
+    var className = getClassName(dom.classList, attrs.group + "-");
+    dom.setAttribute("data-" + attrs.group, className);
+    var delay = getIteratedDelay(attrs.group, attrs.delay);
+    setTimeout(function () { return dom.classList.remove(className); }, delay || requestAnimationFrame);
+}
+function onBeforeRemoveFn(dom, attrs) {
+    var className = dom.getAttribute("data-" + attrs.group);
+    var delay = getIteratedDelay(attrs.group, attrs.delay);
+    setTimeout(function () { return dom.classList.add(className + "-after"); }, delay);
+    var duration = getCSSTransitionDuration(dom);
+    return new Promise(function (resolve) { return setTimeout(resolve, duration + delay); });
+}
+function getGroupDOMNodes(child, group, deep, depth) {
+    if (deep === void 0) { deep = false; }
+    if (depth === void 0) { depth = 0; }
+    var nodes = [];
+    if (Array.isArray(child)) {
+        child.forEach(function (c) {
+            nodes = nodes.concat(getGroupDOMNodes(c, group, deep, depth));
+        });
+    }
+    else {
+        if (child && child.attrs && child.attrs.className && child.attrs.className.split(" ").indexOf(group) !== -1) {
+            nodes.push(child);
+            depth++;
+            if (deep === false || deep === depth) {
+                return nodes;
+            }
+        }
+        if (Array.isArray(child.children)) {
+            child.children.forEach(function (c) {
+                nodes = nodes.concat(getGroupDOMNodes(c, group, deep, depth));
+            });
+        }
+    }
+    return nodes;
+}
+function childrenAttrsInjector(children, attrs) {
+    if (Array.isArray(children)) {
+        children.forEach(attrsInjector(attrs));
+    }
+}
 function attrsInjector(attrs) {
-    var parentAttrs = attrs;
     return function (v) {
         if (typeof v.attrs !== "object" || v.attrs === null) {
             v.attrs = {};
         }
         var attachedOncreateFn = v.attrs.oncreate;
         v.attrs.oncreate = function () {
-            var delay = getIteratedDelay(parentAttrs.group, parentAttrs.delay);
-            setTimeout(function () { return v.dom.classList.add("oncreate"); }, delay || requestAnimationFrame);
+            onCreateFn(v.dom, attrs);
             if (typeof attachedOncreateFn === "function") {
                 attachedOncreateFn(v);
             }
@@ -44,13 +88,7 @@ function attrsInjector(attrs) {
         var attachedOnbeforeremoveFn = v.attrs.onbeforeremove;
         v.attrs.onbeforeremove = function () {
             var promises = [];
-            var delay = getIteratedDelay(parentAttrs.group, attrs.delay);
-            setTimeout(function () {
-                v.dom.classList.add("onbeforeremove");
-                v.dom.classList.remove("oncreate");
-            }, delay);
-            var transitionDuration = getCSSTransitionDuration(v.dom);
-            promises.push(new Promise(function (resolve) { return setTimeout(resolve, transitionDuration + delay); }));
+            promises.push(onBeforeRemoveFn(v.dom, attrs));
             if (typeof attachedOnbeforeremoveFn === "function") {
                 promises.push(attachedOnbeforeremoveFn(v));
             }
@@ -58,26 +96,7 @@ function attrsInjector(attrs) {
         };
     };
 }
-function getFirstDOMNodes(child) {
-    if (!child) {
-        return;
-    }
-    if (Array.isArray(child)) {
-        return child.reduce(function (total, c) { return total.concat(getFirstDOMNodes(c)); }, []).filter(function (n) { return n !== undefined; });
-    }
-    if (isValidVnodeDOM(child)) {
-        return [child];
-    }
-    if (child.children) {
-        return getFirstDOMNodes(child.children);
-    }
-}
-function inject(children, attrs) {
-    if (Array.isArray(children)) {
-        children.forEach(attrsInjector(attrs));
-    }
-}
-function execAllOnbeforeremoveFns(children) {
+function onAllOnbeforeremoveFns(children) {
     var promises = [];
     if (Array.isArray(children)) {
         children.forEach(function (c) {
@@ -89,13 +108,19 @@ function execAllOnbeforeremoveFns(children) {
     return Promise.all(promises);
 }
 exports["default"] = function (v) {
+    var children = [];
+    var inject = function (v) {
+        children = getGroupDOMNodes(v.children, v.attrs.group, v.attrs.deep);
+        childrenAttrsInjector(children, v.attrs);
+    };
     return {
+        oninit: inject,
+        onbeforeupdate: inject,
         view: function (v) {
-            inject(getFirstDOMNodes(v.children), v.attrs);
             return v.children;
         },
         onbeforeremove: function (v) {
-            return execAllOnbeforeremoveFns(getFirstDOMNodes(v.children));
+            return onAllOnbeforeremoveFns(children);
         }
     };
 };
