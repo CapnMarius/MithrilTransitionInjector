@@ -107,7 +107,7 @@ function onAllOnbeforeremoveFns(children) {
     }
     return Promise.all(promises);
 }
-exports["default"] = function (v) {
+var TransitionInjector = function (v) {
     var children = [];
     var inject = function (v) {
         children = getGroupDOMNodes(v.children, v.attrs.group, v.attrs.deep);
@@ -124,3 +124,5 @@ exports["default"] = function (v) {
         }
     };
 };
+exports["default"] = TransitionInjector;
+module["exports"] = TransitionInjector;

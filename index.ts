@@ -139,7 +139,7 @@ function onAllOnbeforeremoveFns(children: m.ChildArrayOrPrimitive): Promise<any>
   return Promise.all(promises);
 }
 
-export default (v: m.Vnode<IAttrs>) => {
+const TransitionInjector = (v: m.Vnode<IAttrs>) => {
   let children = [];
   const inject = (v: m.Vnode<IAttrs>) => {
     children = getGroupDOMNodes(v.children as Vnode[], v.attrs.group, v.attrs.deep);
@@ -156,3 +156,5 @@ export default (v: m.Vnode<IAttrs>) => {
     },
   };
 };
+
+export default TransitionInjector;
