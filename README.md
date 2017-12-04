@@ -23,22 +23,20 @@ import "./style.scss";
 
 export default class App implements m.ClassComponent<any> {
   public view(v: m.CVnode<any>) {
-    return <T delay={250} transitionprefix="t" group="group-1" deep={2}>
-      <div className="app t t-down">
-        <div className="title t t-down">My Todo's</div>
-        <button className="clear t t-down">X</button>
+    return <T delay={250}>
+      <div className="app" transition="slide-down">
+        <div className="title" transition="slide-down">My Todo's</div>
+        <button className="clear" transition="slide-down">X</button>
 
         <div className="todos">
-            <T delay={100} transitionprefix="t" group="group-2" pause={750}>
-              {this.todos.map((todo: ITodo, index: number) =>
-                <Todo className="t t-right" key={todo.id} done={todo.done}>
-                  {todo.title}
-                </Todo>,
-              )}
-            </T>
+          {this.todos.map((todo: ITodo, index: number) =>
+            <Todo transition="slide-right" key={todo.id} done={todo.done}>
+              {todo.title}
+            </Todo>,
+          )}
         </div>
 
-        <input className="t t-down" />
+        <input transition="slide-down" />
       </div>
     </T>;
   }
@@ -46,23 +44,26 @@ export default class App implements m.ClassComponent<any> {
 ```
 
 ```css
-.t {
-  transition: transform .5s cubic-bezier(.63, .44, .37, 1.72), opacity .5s;
-  &.t-right {
-    transform: translate3d(-100px, 0, 0);
+.slide-right {
+  transition: transform #{$duration}s $transitionBounce, opacity #{$duration}s;
+  &.before {
+    transform: translateX(-100px);
     opacity: 0;
   }
-  &.t-right-after {
-    transform: translate3d(100px, 0, 0);
+  &.after {
+    transform: translateX(100px);
     opacity: 0;
   }
+}
 
-  &.t-down {
-    transform: translate3d(0, -100px, 0);
+.slide-down {
+  transition: transform #{$duration}s $transitionBounce, opacity #{$duration}s;
+  &.before {
+    transform: translateY(-100px);
     opacity: 0;
   }
-  &.t-down-after {
-    transform: translate3d(0, 100px, 0);
+  &.after {
+    transform: translateY(100px);
     opacity: 0;
   }
 }

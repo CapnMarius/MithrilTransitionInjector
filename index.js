@@ -1,132 +1,163 @@
 "use strict";
 exports.__esModule = true;
+var m = require("mithril");
 var groups = {};
-function getIteratedDelay(group, delay, pause) {
+function getIteratedDelay(group, delay) {
     if (group === void 0) { group = "main"; }
     if (delay === void 0) { delay = 0; }
-    if (pause === void 0) { pause = 0; }
-    if (delay === 0) {
-        return delay + pause;
-    }
     if (groups[group] === undefined) {
         groups[group] = { iteration: 0, lastStamp: 0 };
     }
     var g = groups[group];
     g.iteration++;
-    var first = g.lastStamp === 0;
-    if (g.lastStamp + 100 < Date.now()) {
+    if (g.lastStamp + 50 < Date.now()) {
         g.iteration = 0;
     }
-    else {
-        first = true;
-    }
     g.lastStamp = Date.now();
-    return (g.iteration * delay) + (first ? pause : 0);
+    return g.iteration * delay;
 }
-function getCSSTransitionDuration(dom) {
-    return (parseFloat(getComputedStyle(dom).transitionDelay) +
-        parseFloat(getComputedStyle(dom).transitionDuration)) * 1000;
-}
-function isValidVnodeDOM(v) {
-    return v.tag !== "#" && v.tag !== "[" && v.tag !== "<";
-}
-function getClassName(list, prefix) {
-    var arrList = Array.from(list) || [];
-    var index = arrList.findIndex(function (x) { return x.indexOf(prefix) === 0; });
-    return arrList[index];
-}
-function onCreateFn(dom, attrs) {
-    var className = getClassName(dom.classList, attrs.transitionprefix + "-");
-    dom.setAttribute("data-" + attrs.transitionprefix, className);
-    var delay = getIteratedDelay(attrs.group, attrs.delay, attrs.pause);
-    setTimeout(function () { return dom.classList.remove(className); }, delay || requestAnimationFrame);
-}
-function onBeforeRemoveFn(dom, attrs) {
-    var className = dom.getAttribute("data-" + attrs.transitionprefix);
-    var delay = getIteratedDelay(attrs.group, attrs.delay, attrs.pause);
-    setTimeout(function () { return dom.classList.add(className + "-after"); }, delay);
-    var duration = getCSSTransitionDuration(dom);
-    return new Promise(function (resolve) { return setTimeout(resolve, duration + delay); });
-}
-function getGroupDOMNodes(child, transitionprefix, deep, depth) {
-    if (deep === void 0) { deep = 1; }
-    if (depth === void 0) { depth = 0; }
-    var nodes = [];
-    if (depth >= deep) {
-        return nodes;
+function getClassName() {
+    var classNames = [];
+    for (var _i = 0; _i < arguments.length; _i++) {
+        classNames[_i] = arguments[_i];
     }
-    if (Array.isArray(child)) {
-        child.forEach(function (c) {
-            nodes = nodes.concat(getGroupDOMNodes(c, transitionprefix, deep, depth));
-        });
+    return classNames
+        .filter(function (x) { return typeof x === "string"; })
+        .map(function (x) { return x.trim(); })
+        .join(" ");
+}
+function getComputedStyleNumber(dom, property) {
+    var style = getComputedStyle(dom)[property];
+    return style ? parseFloat(style) : 0;
+}
+function getTransitionDuration(dom) {
+    return (getComputedStyleNumber(dom, "transitionDelay") +
+        getComputedStyleNumber(dom, "transitionDuration")) * 1000;
+}
+function injectAttrsObj(node) {
+    if (!node.attrs) {
+        node.attrs = {};
+    }
+}
+function injectClassName(node) {
+    var classNames = [];
+    for (var _i = 1; _i < arguments.length; _i++) {
+        classNames[_i - 1] = arguments[_i];
+    }
+    node.attrs.className = getClassName.apply(void 0, [node.attrs.className, node.attrs.transition].concat(classNames));
+}
+function injectOninit(node, attrs) {
+    var oninit = node.attrs.oninit;
+    node.attrs.oninit = function (v) {
+        injectClassName(v, "before");
+        if (typeof oninit === "function") {
+            oninit(v);
+        }
+    };
+}
+function injectOnbefore(node, attrs) {
+    var oncreate = node.attrs.oncreate;
+    node.attrs.oncreate = function (v) {
+        var intervalDelay = getIteratedDelay(attrs.group, attrs.delay);
+        setTimeout(function () {
+            v.dom.classList.remove("before");
+        }, intervalDelay || 20);
+        if (typeof oncreate === "function") {
+            oncreate(v);
+        }
+    };
+}
+function injectOnbeforeremove(node, attrs) {
+    var onbeforeremove = node.attrs.onbeforeremove;
+    node.attrs.onbeforeremove = function (v) {
+        var promises = [];
+        var intervalDelay = getIteratedDelay(attrs.group, attrs.delay);
+        var delay = getTransitionDuration(v.dom);
+        setTimeout(function () { return v.dom.classList.add("after"); }, intervalDelay);
+        promises.push(new Promise(function (resolve) { return setTimeout(function () { return resolve(); }, delay + intervalDelay); }));
+        if (typeof onbeforeremove === "function") {
+            promises.push(onbeforeremove(v));
+        }
+        return Promise.all(promises);
+    };
+}
+function injectAttrs(nodes, attrs) {
+    nodes.forEach(function (node) {
+        injectAttrsObj(node);
+        injectClassName(node);
+        injectOninit(node, attrs);
+        injectOnbefore(node, attrs);
+        injectOnbeforeremove(node, attrs);
+    });
+}
+function searchTransitionTags(node, attrs, depth) {
+    if (depth === void 0) { depth = -1; }
+    depth++;
+    var tags = [];
+    if (typeof node !== "object" || node === null) {
+        return tags;
+    }
+    if (attrs.depth !== undefined && depth > attrs.depth) {
+        return tags;
+    }
+    if (Array.isArray(node)) {
+        for (var _i = 0, node_1 = node; _i < node_1.length; _i++) {
+            var child = node_1[_i];
+            tags = tags.concat(searchTransitionTags(child, attrs, depth));
+        }
     }
     else {
-        depth++;
-        if (child && child.attrs && child.attrs.className && child.attrs.className.split(" ").indexOf(transitionprefix) !== -1) {
-            nodes.push(child);
+        if (node.attrs && node.attrs.transition) {
+            tags.push(node);
         }
-        if (Array.isArray(child.children)) {
-            child.children.forEach(function (c) {
-                nodes = nodes.concat(getGroupDOMNodes(c, transitionprefix, deep, depth));
-            });
+        if (node.children && Array.isArray(node.children)) {
+            for (var _a = 0, _b = node.children; _a < _b.length; _a++) {
+                var child = _b[_a];
+                tags = tags.concat(searchTransitionTags(child, attrs, depth));
+            }
+        }
+        if (typeof node.tag === "function") {
+            var view = void 0;
+            if (node.tag.prototype && typeof node.tag.prototype.view === "function") {
+                view = node.tag.prototype.view;
+            }
+            else {
+                try {
+                    view = node.tag(node).view;
+                }
+                catch (err) {
+                    view = undefined;
+                }
+            }
+            if (typeof view === "function") {
+                var child = view(node);
+                if (searchTransitionTags(child, attrs, depth).length > 0) {
+                    node.attrs.transition = child.attrs.transition;
+                    tags.push(node);
+                }
+            }
         }
     }
-    return nodes;
+    return tags;
 }
-function childrenAttrsInjector(children, attrs) {
-    if (Array.isArray(children)) {
-        children.forEach(attrsInjector(attrs));
+var T = (function () {
+    function T() {
+        this.tags = [];
     }
-}
-function attrsInjector(attrs) {
-    return function (v) {
-        if (typeof v.attrs !== "object" || v.attrs === null) {
-            v.attrs = {};
+    T.prototype.view = function (v) {
+        var node = m("[", v.attrs, v.children);
+        this.tags = searchTransitionTags(node, v.attrs);
+        injectAttrs(this.tags, v.attrs);
+        return node;
+    };
+    T.prototype.onbeforeremove = function (v) {
+        var promises = [];
+        for (var _i = 0, _a = this.tags; _i < _a.length; _i++) {
+            var node = _a[_i];
+            promises.push(node.attrs.onbeforeremove(node));
         }
-        var attachedOncreateFn = v.attrs.oncreate;
-        v.attrs.oncreate = function () {
-            onCreateFn(v.dom, attrs);
-            if (typeof attachedOncreateFn === "function") {
-                attachedOncreateFn(v);
-            }
-        };
-        var attachedOnbeforeremoveFn = v.attrs.onbeforeremove;
-        v.attrs.onbeforeremove = function () {
-            var promises = [];
-            promises.push(onBeforeRemoveFn(v.dom, attrs));
-            if (typeof attachedOnbeforeremoveFn === "function") {
-                promises.push(attachedOnbeforeremoveFn(v));
-            }
-            return Promise.all(promises);
-        };
+        return Promise.all(promises);
     };
-}
-function onAllOnbeforeremoveFns(children) {
-    var promises = [];
-    if (Array.isArray(children)) {
-        children.forEach(function (c) {
-            if (c !== undefined && typeof c.attrs === "object" && c.attrs !== null && typeof c.attrs.onbeforeremove === "function") {
-                promises.push(c.attrs.onbeforeremove());
-            }
-        });
-    }
-    return Promise.all(promises);
-}
-var TransitionInjector = function (v) {
-    var children = [];
-    var inject = function (v) {
-        children = getGroupDOMNodes(v.children, v.attrs.transitionprefix, v.attrs.deep);
-        childrenAttrsInjector(children, v.attrs);
-    };
-    return {
-        oninit: inject,
-        onbeforeupdate: inject,
-        view: function (v) {
-            return v.children;
-        },
-        onbeforeremove: function (v) {
-            return onAllOnbeforeremoveFns(children);
-        }
-    };
-};
-exports["default"] = TransitionInjector;
+    return T;
+}());
+exports["default"] = T;
