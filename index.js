@@ -138,13 +138,18 @@ function searchTransitionTags(node, attrs, depth) {
 function injectPassedComponentAttrs(v, attrs) {
     if (Array.isArray(v.children)) {
         v.children.forEach(function (child) {
-            if (v.attrs && child.attrs && child.attrs.className.indexOf(attrs.transition) === -1) {
+            if (typeof child === "object" &&
+                child !== null &&
+                !Array.isArray(child) &&
+                v.attrs &&
+                child.attrs &&
+                child.attrs.className.indexOf(attrs.transition) === -1) {
                 child.attrs.className = getClassName(child.attrs.className, attrs.transition, "before");
             }
         });
     }
 }
-var T = function (v) {
+var T = function () {
     var tags = [];
     return {
         view: function (v) {

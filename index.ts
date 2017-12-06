@@ -91,7 +91,7 @@ function injectOnbefore(node: m.Vnode<any>, attrs: IAttrs) {
 function injectOnbeforeremove(node: m.Vnode<any>, attrs: IAttrs) {
   const onbeforeremove = node.attrs.onbeforeremove;
   node.attrs.onbeforeremove = (v: m.VnodeDOM<any>) => {
-    const promises = [];
+    const promises: Array<Promise<any>> = [];
     const intervalDelay = getIteratedDelay(
       typeof node.attrs.transitiongroup === "string" ? node.attrs.transitiongroup : attrs.group,
       typeof node.attrs.transitiondelay === "number" ? node.attrs.transitiondelay : attrs.delay,
@@ -163,15 +163,20 @@ function searchTransitionTags(node: m.Children, attrs: IAttrs, depth: number = -
 
 function injectPassedComponentAttrs(v: m.Vnode<any>, attrs: ITagAttrs) {
   if (Array.isArray(v.children)) {
-    v.children.forEach((child: m.Vnode<any>) => {
-      if (v.attrs && child.attrs && child.attrs.className.indexOf(attrs.transition) === -1) {
+    v.children.forEach((child: m.Children) => {
+      if (typeof child === "object" &&
+        child !== null &&
+        !Array.isArray(child) &&
+        v.attrs &&
+        child.attrs &&
+        child.attrs.className.indexOf(attrs.transition) === -1) {
         child.attrs.className = getClassName(child.attrs.className, attrs.transition, "before");
       }
     });
   }
 }
 
-const T = (v: m.Vnode<IAttrs>) => {
+const T = () => {
   const tags: Array<m.Vnode<any>> = [];
 
   return {
@@ -181,7 +186,7 @@ const T = (v: m.Vnode<IAttrs>) => {
       return v.children;
     },
     onbeforeremove(v: m.VnodeDOM<IAttrs>) {
-      const promises = [];
+      const promises: Array<Promise<any>> = [];
       for (const node of this.tags) {
         promises.push(node.attrs.onbeforeremove.call(node.state, node));
       }
@@ -201,7 +206,7 @@ function handleComponentTag(node: m.Vnode<any>, attrs: IAttrs, depth?: number) {
 }
 
 function overrideAttrs(attrs: IAttrs, tagAttrs: ITagAttrs): IAttrs {
-  const nextAttrs = {...attrs};
+  const nextAttrs = { ...attrs };
   if (!tagAttrs) {
     return nextAttrs;
   }
