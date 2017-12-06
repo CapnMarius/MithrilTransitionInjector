@@ -3,9 +3,16 @@ import * as m from "mithril";
 export interface IAttrs {
   group?: string;
   delay?: number;
-  depth?: number;
-  oncreate: (v: m.VnodeDOM<IAttrs>) => void;
-  onbeforeremove: (v: m.VnodeDOM<IAttrs>) => Promise<any>;
+  pause?: number;
+  depth?: number | boolean;
+  currentdepth?: number;
+}
+
+export interface ITagAttrs {
+  transition: string;
+  transitiongroup?: string;
+  transitiondelay?: number;
+  transitionpause?: number;
 }
 
 interface IGroup {
@@ -61,7 +68,7 @@ function injectOninit(node: m.Vnode<any>, attrs: IAttrs) {
   node.attrs.oninit = (v: m.Vnode<any>) => {
     injectClassName(v, "before");
     if (typeof oninit === "function") {
-      oninit(v);
+      oninit.call(v.state, v);
     }
   };
 }
@@ -69,12 +76,14 @@ function injectOninit(node: m.Vnode<any>, attrs: IAttrs) {
 function injectOnbefore(node: m.Vnode<any>, attrs: IAttrs) {
   const oncreate = node.attrs.oncreate;
   node.attrs.oncreate = (v: m.VnodeDOM<any>) => {
-    const intervalDelay = getIteratedDelay(attrs.group, attrs.delay);
-    setTimeout(() => {
-      v.dom.classList.remove("before");
-    }, intervalDelay || 20);
+    const intervalDelay = getIteratedDelay(
+      typeof node.attrs.transitiongroup === "string" ? node.attrs.transitiongroup : attrs.group,
+      typeof node.attrs.transitiondelay === "number" ? node.attrs.transitiondelay : attrs.delay,
+    );
+    const pause = typeof node.attrs.transitionpause === "number" ? node.attrs.transitionpause : attrs.pause;
+    setTimeout(() => v.dom.classList.remove("before"), (intervalDelay || 20) + (pause || 0));
     if (typeof oncreate === "function") {
-      oncreate(v);
+      oncreate.call(v.state, v);
     }
   };
 }
@@ -83,12 +92,15 @@ function injectOnbeforeremove(node: m.Vnode<any>, attrs: IAttrs) {
   const onbeforeremove = node.attrs.onbeforeremove;
   node.attrs.onbeforeremove = (v: m.VnodeDOM<any>) => {
     const promises = [];
-    const intervalDelay = getIteratedDelay(attrs.group, attrs.delay);
+    const intervalDelay = getIteratedDelay(
+      typeof node.attrs.transitiongroup === "string" ? node.attrs.transitiongroup : attrs.group,
+      typeof node.attrs.transitiondelay === "number" ? node.attrs.transitiondelay : attrs.delay,
+    );
     const delay = getTransitionDuration(v.dom);
     setTimeout(() => v.dom.classList.add("after"), intervalDelay);
     promises.push(new Promise((resolve) => setTimeout(() => resolve(), delay + intervalDelay)));
     if (typeof onbeforeremove === "function") {
-      promises.push(onbeforeremove(v));
+      promises.push(onbeforeremove.call(v.state, v));
     }
     return Promise.all(promises);
   };
@@ -111,7 +123,8 @@ function searchTransitionTags(node: m.Children, attrs: IAttrs, depth: number = -
   if (typeof node !== "object" || node === null) {
     return tags;
   }
-  if (attrs.depth !== undefined && depth > attrs.depth) {
+
+  if (attrs.depth !== true && ((attrs.depth === undefined && depth > 1) || (attrs.depth !== undefined && depth > attrs.depth))) {
     return tags;
   }
 
@@ -119,55 +132,111 @@ function searchTransitionTags(node: m.Children, attrs: IAttrs, depth: number = -
     for (const child of node) {
       tags = [...tags, ...searchTransitionTags(child, attrs, depth)];
     }
-  } else {
-    if (node.attrs && node.attrs.transition) {
-      tags.push(node);
-    }
+    return tags;
+  }
 
-    if (node.children && Array.isArray(node.children)) {
-      for (const child of node.children) {
-        tags = [...tags, ...searchTransitionTags(child, attrs, depth)];
-      }
-    }
+  if (node.tag === "#" || node.tag === "<") {
+    return tags;
+  }
 
-    if (typeof node.tag === "function") {
-      let view;
-      if (node.tag.prototype && typeof node.tag.prototype.view === "function") {
-        view = node.tag.prototype.view;
-      } else {
-        try {
-          view = (node.tag as any)(node).view;
-        } catch (err) {
-          view = undefined;
-        }
-      }
-      if (typeof view === "function") {
-        const child: m.Vnode<any> = view(node);
-        if (searchTransitionTags(child, attrs, depth).length > 0) {
-          node.attrs.transition = child.attrs.transition;
-          tags.push(node);
-        }
-      }
+  if (node.tag === "[") {
+    tags = [...tags, ...searchTransitionTags(node.children, attrs, depth - 1)];
+    return tags;
+  }
+
+  if (node.attrs && node.attrs.transition) {
+    tags.push(node);
+  }
+
+  if (node.children && Array.isArray(node.children)) {
+    for (const child of node.children) {
+      tags = [...tags, ...searchTransitionTags(child, attrs, depth)];
     }
   }
+
+  if (typeof node.tag === "function") {
+    handleComponentTag(node, attrs, depth);
+  }
+
   return tags;
 }
 
-export default class T {
-  private tags: Array<m.Vnode<any>> = [];
-
-  public view(v: m.Vnode<IAttrs>) {
-    const node = m("[", v.attrs, v.children);
-    this.tags = searchTransitionTags(node, v.attrs);
-    injectAttrs(this.tags, v.attrs);
-    return node;
-  }
-
-  public onbeforeremove(v: m.VnodeDOM<IAttrs>) {
-    const promises = [];
-    for (const node of this.tags) {
-      promises.push(node.attrs.onbeforeremove(node));
-    }
-    return Promise.all(promises);
+function injectPassedComponentAttrs(v: m.Vnode<any>, attrs: ITagAttrs) {
+  if (Array.isArray(v.children)) {
+    v.children.forEach((child: m.Vnode<any>) => {
+      if (v.attrs && child.attrs && child.attrs.className.indexOf(attrs.transition) === -1) {
+        child.attrs.className = getClassName(child.attrs.className, attrs.transition, "before");
+      }
+    });
   }
 }
+
+const T = (v: m.Vnode<IAttrs>) => {
+  const tags: Array<m.Vnode<any>> = [];
+
+  return {
+    view(v: m.Vnode<IAttrs>) {
+      this.tags = searchTransitionTags(v.children, v.attrs, v.attrs.currentdepth);
+      injectAttrs(this.tags, v.attrs);
+      return v.children;
+    },
+    onbeforeremove(v: m.VnodeDOM<IAttrs>) {
+      const promises = [];
+      for (const node of this.tags) {
+        promises.push(node.attrs.onbeforeremove.call(node.state, node));
+      }
+      return Promise.all(promises);
+    },
+  };
+};
+
+function handleComponentTag(node: m.Vnode<any>, attrs: IAttrs, depth?: number) {
+  try {
+    if (typeof node.tag === "function") {
+      inject(node.tag, attrs, depth);
+    }
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function overrideAttrs(attrs: IAttrs, tagAttrs: ITagAttrs): IAttrs {
+  const nextAttrs = {...attrs};
+  if (!tagAttrs) {
+    return nextAttrs;
+  }
+  if (tagAttrs.transitiongroup !== undefined) {
+    nextAttrs.group = tagAttrs.transitiongroup;
+  }
+  if (tagAttrs.transitiondelay !== undefined) {
+    nextAttrs.delay = tagAttrs.transitiondelay;
+  }
+  if (tagAttrs.transitionpause !== undefined) {
+    nextAttrs.pause = tagAttrs.transitionpause;
+  }
+  return nextAttrs;
+}
+
+export const inject = (component: any, attrs: IAttrs, depth?: number) => {
+  if (!component.prototype || !component.prototype.view) {
+    throw new Error("Component not supported, no view method found");
+  }
+  if (component.prototype.injected) {
+    return component;
+  }
+  component.prototype.injected = true;
+
+  const view = component.prototype.view;
+  component.prototype.view = (v: m.Vnode<ITagAttrs>) => {
+    const mergedAttrs = overrideAttrs(attrs, v.attrs);
+    const t = m(T, { ...mergedAttrs, currentdepth: depth }, view.call(v.state, v));
+    if (v.attrs) {
+      injectPassedComponentAttrs(t, v.attrs);
+    }
+    return t;
+  };
+
+  return component;
+};
+
+export default T;
