@@ -32,7 +32,7 @@ export default class App implements m.ClassComponent<any> {
 
         <div className="todos">
           {this.todos.map((todo: ITodo, index: number) =>
-            <Todo transition="slide-right" transitiongroup="todo" key={todo.id} done={todo.done}>
+            <Todo transition="slide-right" transitiongroup="todo" transitiondelay={100} key={todo.id} done={todo.done}>
               {todo.title}
             </Todo>,
           )}
@@ -60,7 +60,7 @@ class App implements m.ClassComponent<any> {
 
       <div className="todos">
         {this.todos.map((todo: ITodo, index: number) =>
-          <Todo transition="slide-right" transitiongroup="todo" key={todo.id} done={todo.done}>
+          <Todo transition="slide-right" transitiongroup="todo" transitiondelay={100} key={todo.id} done={todo.done}>
             {todo.title}
           </Todo>,
         )}

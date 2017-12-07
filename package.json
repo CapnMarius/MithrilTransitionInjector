@@ -1,6 +1,6 @@
 {
   "name": "mithril-transition-injector",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "The most easy and awesome way to add mount and unmount transitions to your components with CSS",
   "repository": {
     "type": "git",

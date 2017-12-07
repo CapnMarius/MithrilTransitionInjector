@@ -13,26 +13,28 @@ export interface ITagAttrs {
   transitiongroup?: string;
   transitiondelay?: number;
   transitionpause?: number;
+  currentdepth?: number;
+  onbeforeremove?: any;
 }
 
-interface IGroup {
-  iteration: number;
-  lastStamp: number;
-}
+const T = () => {
+  const tags: Array<m.Vnode<any>> = [];
 
-const groups: { [key: string]: IGroup } = {};
-function getIteratedDelay(group: string = "main", delay: number = 0): number {
-  if (groups[group] === undefined) {
-    groups[group] = { iteration: 0, lastStamp: 0 };
-  }
-  const g: IGroup = groups[group];
-  g.iteration++;
-  if (g.lastStamp + 50 < Date.now()) {
-    g.iteration = 0;
-  }
-  g.lastStamp = Date.now();
-  return g.iteration * delay;
-}
+  return {
+    view(v: m.Vnode<IAttrs>) {
+      this.tags = searchTransitionTags(v.children, v.attrs, v.attrs.currentdepth);
+      injectAttrs(this.tags, v.attrs);
+      return v.children;
+    },
+    onbeforeremove(v: m.VnodeDOM<IAttrs>) {
+      const promises: Array<Promise<any>> = [];
+      for (const node of this.tags) {
+        promises.push(node.attrs.onbeforeremove.call(node.state, node));
+      }
+      return Promise.all(promises);
+    },
+  };
+};
 
 function getClassName(...classNames: any[]): string {
   return classNames
@@ -53,66 +55,96 @@ function getTransitionDuration(dom: Element): number {
   ) * 1000;
 }
 
+function getExecutionDelay(node: m.Vnode<any>, attrs: IAttrs) {
+  const group = typeof node.attrs.transitiongroup === "string" ? node.attrs.transitiongroup : attrs.group;
+  const delay = typeof node.attrs.transitiondelay === "number" ? node.attrs.transitiondelay : attrs.delay;
+  return delay * getExecutionOrderIndex(group);
+}
+
 function injectAttrsObj(node: m.Vnode<any>) {
   if (!node.attrs) {
     node.attrs = {};
   }
 }
 
-function injectClassName(node: m.Vnode<any>, ...classNames: string[]) {
+function injectAttrsClassName(node: m.Vnode<any>, ...classNames: string[]) {
   node.attrs.className = getClassName(node.attrs.className, node.attrs.transition, ...classNames);
 }
 
-function injectOninit(node: m.Vnode<any>, attrs: IAttrs) {
+function injectAttrsOninit(node: m.Vnode<any>, attrs: IAttrs) {
   const oninit = node.attrs.oninit;
   node.attrs.oninit = (v: m.Vnode<any>) => {
-    injectClassName(v, "before");
+    if (typeof node.tag === "function" && typeof node.tag.prototype.oninit === "function") {
+      node.tag.prototype.oninit.call(v.state, v);
+    }
     if (typeof oninit === "function") {
       oninit.call(v.state, v);
     }
+    v.attrs.className = getClassName(v.attrs.className, "before");
   };
 }
 
-function injectOnbefore(node: m.Vnode<any>, attrs: IAttrs) {
+function injectAttrsOnbefore(node: m.Vnode<any>, attrs: IAttrs) {
   const oncreate = node.attrs.oncreate;
   node.attrs.oncreate = (v: m.VnodeDOM<any>) => {
-    const intervalDelay = getIteratedDelay(
-      typeof node.attrs.transitiongroup === "string" ? node.attrs.transitiongroup : attrs.group,
-      typeof node.attrs.transitiondelay === "number" ? node.attrs.transitiondelay : attrs.delay,
-    );
-    const pause = typeof node.attrs.transitionpause === "number" ? node.attrs.transitionpause : attrs.pause;
-    setTimeout(() => v.dom.classList.remove("before"), (intervalDelay || 20) + (pause || 0));
+    if (typeof node.tag === "function" && typeof node.tag.prototype.oncreate === "function") {
+      node.tag.prototype.oncreate.call(node.state, node);
+    }
     if (typeof oncreate === "function") {
       oncreate.call(v.state, v);
     }
+
+    const intervalDelay = getExecutionDelay(node, attrs);
+
+    const pause = typeof node.attrs.transitionpause === "number" ? node.attrs.transitionpause : attrs.pause;
+    setTimeout(() => v.dom.classList.remove("before"), (intervalDelay || 20) + (pause || 0));
   };
 }
 
-function injectOnbeforeremove(node: m.Vnode<any>, attrs: IAttrs) {
+function injectAttrsOnbeforeremove(node: m.Vnode<any>, attrs: IAttrs) {
   const onbeforeremove = node.attrs.onbeforeremove;
   node.attrs.onbeforeremove = (v: m.VnodeDOM<any>) => {
     const promises: Array<Promise<any>> = [];
-    const intervalDelay = getIteratedDelay(
-      typeof node.attrs.transitiongroup === "string" ? node.attrs.transitiongroup : attrs.group,
-      typeof node.attrs.transitiondelay === "number" ? node.attrs.transitiondelay : attrs.delay,
-    );
-    const delay = getTransitionDuration(v.dom);
-    setTimeout(() => v.dom.classList.add("after"), intervalDelay);
-    promises.push(new Promise((resolve) => setTimeout(() => resolve(), delay + intervalDelay)));
+    if (typeof node.tag === "function" && typeof node.tag.prototype.onbeforeremove === "function") {
+      promises.push(node.tag.prototype.onbeforeremove.call(v.state, v));
+    }
     if (typeof onbeforeremove === "function") {
       promises.push(onbeforeremove.call(v.state, v));
     }
+
+    const intervalDelay = getExecutionDelay(node, attrs);
+
+    const transitionDuration = getTransitionDuration(v.dom);
+    setTimeout(() => v.dom.classList.add("after"), intervalDelay);
+    promises.push(new Promise((resolve) => setTimeout(() => resolve(), transitionDuration + intervalDelay)));
     return Promise.all(promises);
   };
 }
 
+const groupExecutionOrder = {};
+function getExecutionOrderIndex(group: string = "main"): number {
+  const now = Date.now();
+  if (groupExecutionOrder[group] === undefined) {
+    groupExecutionOrder[group] = { t: now, i: 0 };
+    return 0;
+  }
+
+  if (groupExecutionOrder[group].t + 50 > now) {
+    groupExecutionOrder[group].i++;
+  } else {
+    groupExecutionOrder[group].i = 0;
+  }
+  groupExecutionOrder[group].t = now;
+  return groupExecutionOrder[group].i;
+}
+
 function injectAttrs(nodes: Array<m.Vnode<any>>, attrs: IAttrs) {
-  nodes.forEach((node) => {
+  nodes.forEach((node, i) => {
     injectAttrsObj(node);
-    injectClassName(node);
-    injectOninit(node, attrs);
-    injectOnbefore(node, attrs);
-    injectOnbeforeremove(node, attrs);
+    injectAttrsClassName(node);
+    injectAttrsOninit(node, attrs);
+    injectAttrsOnbefore(node, attrs);
+    injectAttrsOnbeforeremove(node, attrs);
   });
 }
 
@@ -135,6 +167,11 @@ function searchTransitionTags(node: m.Children, attrs: IAttrs, depth: number = -
     return tags;
   }
 
+  if (typeof node.tag === "function") {
+    inject(node, attrs, depth);
+    return tags;
+  }
+
   if (node.tag === "#" || node.tag === "<") {
     return tags;
   }
@@ -154,55 +191,7 @@ function searchTransitionTags(node: m.Children, attrs: IAttrs, depth: number = -
     }
   }
 
-  if (typeof node.tag === "function") {
-    handleComponentTag(node, attrs, depth);
-  }
-
   return tags;
-}
-
-function injectPassedComponentAttrs(v: m.Vnode<any>, attrs: ITagAttrs) {
-  if (Array.isArray(v.children)) {
-    v.children.forEach((child: m.Children) => {
-      if (typeof child === "object" &&
-        child !== null &&
-        !Array.isArray(child) &&
-        v.attrs &&
-        child.attrs &&
-        child.attrs.className.indexOf(attrs.transition) === -1) {
-        child.attrs.className = getClassName(child.attrs.className, attrs.transition, "before");
-      }
-    });
-  }
-}
-
-const T = () => {
-  const tags: Array<m.Vnode<any>> = [];
-
-  return {
-    view(v: m.Vnode<IAttrs>) {
-      this.tags = searchTransitionTags(v.children, v.attrs, v.attrs.currentdepth);
-      injectAttrs(this.tags, v.attrs);
-      return v.children;
-    },
-    onbeforeremove(v: m.VnodeDOM<IAttrs>) {
-      const promises: Array<Promise<any>> = [];
-      for (const node of this.tags) {
-        promises.push(node.attrs.onbeforeremove.call(node.state, node));
-      }
-      return Promise.all(promises);
-    },
-  };
-};
-
-function handleComponentTag(node: m.Vnode<any>, attrs: IAttrs, depth?: number) {
-  try {
-    if (typeof node.tag === "function") {
-      inject(node.tag, attrs, depth);
-    }
-  } catch (err) {
-    console.error(err);
-  }
 }
 
 function overrideAttrs(attrs: IAttrs, tagAttrs: ITagAttrs): IAttrs {
@@ -222,7 +211,22 @@ function overrideAttrs(attrs: IAttrs, tagAttrs: ITagAttrs): IAttrs {
   return nextAttrs;
 }
 
+function injectIntoInstance(v: m.Vnode<any>, parent: m.Vnode<any> | undefined, attrs: IAttrs, depth?: number) {
+  const tags = searchTransitionTags(v, attrs, depth);
+  if (parent && parent.attrs && parent.attrs.transition) {
+    v.attrs = { ...parent.attrs, ...v.attrs };
+    tags.push(v);
+  }
+  injectAttrs(tags, attrs);
+  return v;
+}
+
 export const inject = (component: any, attrs: IAttrs, depth?: number) => {
+  let parent = undefined;
+  if (component.tag) {
+    parent = component;
+    component = component.tag;
+  }
   if (!component.prototype || !component.prototype.view) {
     throw new Error("Component not supported, no view method found");
   }
@@ -234,10 +238,8 @@ export const inject = (component: any, attrs: IAttrs, depth?: number) => {
   const view = component.prototype.view;
   component.prototype.view = (v: m.Vnode<ITagAttrs>) => {
     const mergedAttrs = overrideAttrs(attrs, v.attrs);
-    const t = m(T, { ...mergedAttrs, currentdepth: depth }, view.call(v.state, v));
-    if (v.attrs) {
-      injectPassedComponentAttrs(t, v.attrs);
-    }
+    const t = view.call(v.state, v);
+    injectIntoInstance(t, parent, mergedAttrs, depth);
     return t;
   };
 
