@@ -1,5 +1,5 @@
 "use strict";
-exports.__esModule = true;
+Object.defineProperty(exports, "__esModule", { value: true });
 var m = require("mithril");
 var groups = {};
 function getIteratedDelay(group, delay) {
@@ -160,4 +160,4 @@ var T = (function () {
     };
     return T;
 }());
-exports["default"] = T;
+exports.default = T;
